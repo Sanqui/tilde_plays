@@ -1,0 +1,6 @@
+[package]
+name = "tilde_plays_manager"
+version = "0.1.0"
+authors = ["Sanqui <gsanky@gmail.com>"]
+
+[dependencies]
