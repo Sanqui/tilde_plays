@@ -4,6 +4,7 @@ use std::io::prelude::*;
 use std::net::{TcpStream, TcpListener};
 use std::time::Duration;
 use std::thread;
+use std::str;
 use std::sync::{Arc, Mutex};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -138,6 +139,15 @@ fn main() {
                     continue;
                 };
                 
+                let client_name_len = match stream.read_u16::<BigEndian>() {
+                    Ok(n) => n, Err(_) => continue
+                };
+                let mut client_name = vec![0; client_name_len as usize];
+                
+                stream.read_exact(&mut client_name[0 .. client_name_len as usize]).unwrap();
+                let client_name = str::from_utf8(&client_name).unwrap();
+                println!("Client signed as ~{}", client_name);
+                
                 let mut clients = clients.lock().unwrap();
                 clients.push(stream);
             }
@@ -173,13 +183,6 @@ fn main() {
         
         buttons = 0;
         for (i, mut client) in clients.lock().unwrap().iter().enumerate() {
-            /*let client_buttons = match stream.read_u32::<BigEndian>() {
-                Ok(n) => n, Err(err) => {
-                    println!("Client {} died: {}", i, err);
-                    dead_clients.push(i);
-                    0
-                }
-            };*/
             match client.write_u32::<BigEndian>(frame)
                 .and_then(|()| client.write_u32::<BigEndian>(screen_bytes.len() as u32))
                 .and_then(|()| client.write(&screen_bytes)) {
@@ -189,7 +192,7 @@ fn main() {
                     dead_clients.push(i);
                 }
             };
-            buttons |= client_buttons as u16;
+            //buttons |= client_buttons as u16;
         }
         
         for &client_i in dead_clients.iter() {

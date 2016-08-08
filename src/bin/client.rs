@@ -1,5 +1,6 @@
 extern crate byteorder;
 extern crate nix;
+extern crate users;
 
 use std::io::prelude::*;
 use std::net::TcpStream;
@@ -9,6 +10,7 @@ use std::time::Duration;
 use std::str;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use nix::sys::termios;
+use users::{get_user_by_uid, get_current_uid};
 
 const MAGIC: u32 = 0x717DE;
 const VERSION: u32 = 1;
@@ -20,6 +22,9 @@ const JOY_SELECT: u32 = 1<<3;
 
 fn main() {
     println!("Tilde Plays client");
+    
+    let user = get_user_by_uid(get_current_uid()).unwrap();
+    println!("Hello, ~{}!", user.name());
     
     let mut stream: TcpStream;
     
@@ -48,6 +53,10 @@ fn main() {
     
     stream.write_u32::<BigEndian>(MAGIC).unwrap();
     stream.write_u32::<BigEndian>(VERSION).unwrap();
+    
+    let user_bytes = user.name().as_bytes();
+    stream.write_u16::<BigEndian>(user_bytes.len() as u16).unwrap();
+    stream.write(user_bytes).unwrap();
     
     println!("Connected!");
     
@@ -81,7 +90,6 @@ fn main() {
     
     let mut buttons = 0;
     'main: loop {
-        stream.write_u32::<BigEndian>(buttons).unwrap();
         let frame = stream.read_u32::<BigEndian>().unwrap();
         let screen_length = stream.read_u32::<BigEndian>().unwrap();
         
@@ -114,6 +122,7 @@ fn main() {
         print!("                          ");
         
         keys.drain(..);
+        stream.write_u32::<BigEndian>(buttons).unwrap();
     }
     
     termios::tcsetattr(0, termios::TCSADRAIN, &saved_term).unwrap();
