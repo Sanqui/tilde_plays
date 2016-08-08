@@ -12,6 +12,9 @@ const HEIGHT: usize = 144;
 const BPP: usize = 4;
 const NUMTILES: usize = WIDTH/8*HEIGHT/8;
 
+const MAGIC: u32 = 0x717DE;
+const VERSION: u32 = 1;
+
 type Tile = [u8; 8*8];
 type ScreenTiles = [Tile; NUMTILES];
 
@@ -111,14 +114,30 @@ fn main() {
     println!("Binding TCP server...");
     let listener = TcpListener::bind("127.0.0.1:13722").unwrap();
     {
-        let clients = clients.clone();
-        thread::spawn(move || {    
+        let clients = clients.clone();  
+        thread::spawn(move || {
             println!("Listening in thread...");
             for stream in listener.incoming() {
                 let mut stream = stream.unwrap();
                 println!("Got client: {}", stream.peer_addr().unwrap());
-                stream.write_u32::<BigEndian>(0x717DE).unwrap();
-                stream.write_u32::<BigEndian>(1).unwrap();
+                match stream.write_u32::<BigEndian>(MAGIC) {
+                    Ok(_) => (), Err(_) => continue
+                };
+                match stream.write_u32::<BigEndian>(VERSION) {
+                    Ok(_) => (), Err(_) => continue
+                };
+                
+                let magic = match stream.read_u32::<BigEndian>() {
+                    Ok(n) => n, Err(_) => continue
+                };
+                let version = match stream.read_u32::<BigEndian>() {
+                    Ok(n) => n, Err(_) => continue
+                };
+                
+                if magic != MAGIC || version != VERSION {
+                    continue;
+                };
+                
                 let mut clients = clients.lock().unwrap();
                 clients.push(stream);
             }
@@ -127,13 +146,14 @@ fn main() {
     
     println!("Starting main loop...");
     
+    let mut buttons = 0;
+    
     loop {
         //println!("Frame {}", frame);
         if frame % 100 == 0 {
             println!("On frame {}...", frame);
         }
         
-        let mut buttons = 0;
         
         stream.write_u16::<BigEndian>(buttons).unwrap();
         
@@ -151,7 +171,15 @@ fn main() {
         
         let mut dead_clients = vec![];
         
+        buttons = 0;
         for (i, mut client) in clients.lock().unwrap().iter().enumerate() {
+            /*let client_buttons = match stream.read_u32::<BigEndian>() {
+                Ok(n) => n, Err(err) => {
+                    println!("Client {} died: {}", i, err);
+                    dead_clients.push(i);
+                    0
+                }
+            };*/
             match client.write_u32::<BigEndian>(frame)
                 .and_then(|()| client.write_u32::<BigEndian>(screen_bytes.len() as u32))
                 .and_then(|()| client.write(&screen_bytes)) {
@@ -161,6 +189,7 @@ fn main() {
                     dead_clients.push(i);
                 }
             };
+            buttons |= client_buttons as u16;
         }
         
         for &client_i in dead_clients.iter() {
