@@ -115,8 +115,10 @@ fn main() {
         thread::spawn(move || {    
             println!("Listening in thread...");
             for stream in listener.incoming() {
-                let stream = stream.unwrap();
+                let mut stream = stream.unwrap();
                 println!("Got client: {}", stream.peer_addr().unwrap());
+                stream.write_u32::<BigEndian>(0x717DE).unwrap();
+                stream.write_u32::<BigEndian>(1).unwrap();
                 let mut clients = clients.lock().unwrap();
                 clients.push(stream);
             }
@@ -142,9 +144,29 @@ fn main() {
         
         //println!("read {} bytes", screen.len());
         let screen_ascii = tiles_to_ascii(tilify(screen));
+        let screen_bytes = screen_ascii.into_bytes();
         /*print!("{}[2J", 27 as char);
         println!("=== FRAME {} ===", frame);
         println!("{}", screen_ascii);*/
+        
+        let mut dead_clients = vec![];
+        
+        for (i, mut client) in clients.lock().unwrap().iter().enumerate() {
+            match client.write_u32::<BigEndian>(frame)
+                .and_then(|()| client.write_u32::<BigEndian>(screen_bytes.len() as u32))
+                .and_then(|()| client.write(&screen_bytes)) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!("Client {} died: {}", i, err);
+                    dead_clients.push(i);
+                }
+            };
+        }
+        
+        for &client_i in dead_clients.iter() {
+            clients.lock().unwrap().swap_remove(client_i);
+        }
+        
         frame += 1;
         thread::sleep(Duration::from_millis(25));
     }
