@@ -78,8 +78,20 @@ fn tiles_to_ascii(screen: ScreenTiles) -> String {
 fn main() {
     println!("Tilde Plays manager");
     
-    let mut stream = TcpStream::connect("127.0.0.1:13721").unwrap();
+    let mut stream: TcpStream;
     
+    println!("Will connect to mgba...");
+    loop {
+        stream = match TcpStream::connect("127.0.0.1:13721") {
+            Ok(stream) => stream,
+            Err(err) => {
+                println!("Failed to connect: {}", err);
+                thread::sleep(Duration::from_millis(1000));
+                continue
+            }
+        };
+        break
+    }
     
     let width = stream.read_u32::<BigEndian>().unwrap();
     let height = stream.read_u32::<BigEndian>().unwrap();
