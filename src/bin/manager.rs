@@ -1,9 +1,10 @@
 extern crate byteorder;
 
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::net::{TcpStream, TcpListener};
 use std::time::Duration;
 use std::thread;
+use std::sync::{Arc, Mutex};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 const WIDTH: usize = 160;
@@ -80,7 +81,7 @@ fn main() {
     
     let mut stream: TcpStream;
     
-    println!("Will connect to mgba...");
+    println!("Connecting to mgba...");
     loop {
         stream = match TcpStream::connect("127.0.0.1:13721") {
             Ok(stream) => stream,
@@ -106,8 +107,29 @@ fn main() {
     
     let mut frame = 0;
     
+    let clients = Arc::new(Mutex::new(Vec::new()));
+    println!("Binding TCP server...");
+    let listener = TcpListener::bind("127.0.0.1:13722").unwrap();
+    {
+        let clients = clients.clone();
+        thread::spawn(move || {    
+            println!("Listening in thread...");
+            for stream in listener.incoming() {
+                let stream = stream.unwrap();
+                println!("Got client: {}", stream.peer_addr().unwrap());
+                let mut clients = clients.lock().unwrap();
+                clients.push(stream);
+            }
+        });
+    };
+    
+    println!("Starting main loop...");
+    
     loop {
         //println!("Frame {}", frame);
+        if frame % 100 == 0 {
+            println!("On frame {}...", frame);
+        }
         
         let mut buttons = 0;
         
@@ -120,11 +142,11 @@ fn main() {
         
         //println!("read {} bytes", screen.len());
         let screen_ascii = tiles_to_ascii(tilify(screen));
-        print!("{}[2J", 27 as char);
+        /*print!("{}[2J", 27 as char);
         println!("=== FRAME {} ===", frame);
-        println!("{}", screen_ascii);
+        println!("{}", screen_ascii);*/
         frame += 1;
-        //thread::sleep(Duration::from_millis(25));
+        thread::sleep(Duration::from_millis(25));
     }
 }
 
