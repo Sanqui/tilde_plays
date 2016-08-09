@@ -12,13 +12,13 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use nix::sys::termios;
 use users::{get_user_by_uid, get_current_uid};
 
-const MAGIC: u32 = 0x717DE;
-const VERSION: u32 = 1;
+const MAGIC: u32 = 0x711DE;
+const VERSION: u32 = 2;
 
-const JOY_A: u32 = 1<<0;
-const JOY_B: u32 = 1<<1;
-const JOY_START: u32 = 1<<2;
-const JOY_SELECT: u32 = 1<<3;
+enum Button {
+    A, B, Start, Select,
+    Up, Down, Left, Right
+}
 
 fn main() {
     println!("Tilde Plays client");
@@ -112,9 +112,9 @@ fn main() {
             if key == 3 {
                 break 'main;
             } else if key == 'z' as u32 {
-                buttons |= JOY_A;
+                buttons |= Button::A as u32;
             } else if key == 'x' as u32 {
-                buttons |= JOY_B;
+                buttons |= Button::B as u32;
             } else {
                 print!("? {} ", key);
             }

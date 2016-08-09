@@ -13,11 +13,22 @@ const HEIGHT: usize = 144;
 const BPP: usize = 4;
 const NUMTILES: usize = WIDTH/8*HEIGHT/8;
 
-const MAGIC: u32 = 0x717DE;
-const VERSION: u32 = 1;
+const MAGIC: u32 = 0x711DE;
+const VERSION: u32 = 2;
 
 type Tile = [u8; 8*8];
 type ScreenTiles = [Tile; NUMTILES];
+
+enum Button {
+    A, B, Start, Select,
+    Up, Down, Left, Right
+}
+
+struct Client {
+    stream: TcpStream,
+    name: String,
+    buttons: Vec<Button>
+}
 
 fn tilify(screen: [u8; WIDTH*HEIGHT*BPP]) -> ScreenTiles {
     let mut tiles: ScreenTiles = [[0; 8*8]; NUMTILES];
@@ -121,6 +132,9 @@ fn main() {
             for stream in listener.incoming() {
                 let mut stream = stream.unwrap();
                 println!("Got client: {}", stream.peer_addr().unwrap());
+                
+                // somebody please help me here
+                
                 match stream.write_u32::<BigEndian>(MAGIC) {
                     Ok(_) => (), Err(_) => continue
                 };
@@ -144,12 +158,13 @@ fn main() {
                 };
                 let mut client_name = vec![0; client_name_len as usize];
                 
-                stream.read_exact(&mut client_name[0 .. client_name_len as usize]).unwrap();
-                let client_name = str::from_utf8(&client_name).unwrap();
+                stream.read_exact(&mut client_name[..]).unwrap();
+                let client_name = String::from_utf8(client_name).unwrap();
                 println!("Client signed as ~{}", client_name);
                 
                 let mut clients = clients.lock().unwrap();
-                clients.push(stream);
+                let client = Client { stream: stream, name: client_name, buttons: vec!() };
+                clients.push(client);
             }
         });
     };
@@ -183,15 +198,18 @@ fn main() {
         
         buttons = 0;
         for (i, mut client) in clients.lock().unwrap().iter().enumerate() {
-            match client.write_u32::<BigEndian>(frame)
-                .and_then(|()| client.write_u32::<BigEndian>(screen_bytes.len() as u32))
-                .and_then(|()| client.write(&screen_bytes)) {
+            //let mut stream = client.stream;
+            match client.stream.write_u32::<BigEndian>(frame)
+                .and_then(|()| client.stream.write_u32::<BigEndian>(screen_bytes.len() as u32))
+                .and_then(|()| client.stream.write(&screen_bytes)) {
                 Ok(_) => (),
                 Err(err) => {
                     println!("Client {} died: {}", i, err);
                     dead_clients.push(i);
                 }
             };
+            
+            //buttons = client.read_u32::<BigEndian>().unwrap();
             //buttons |= client_buttons as u16;
         }
         
